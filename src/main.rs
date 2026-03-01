@@ -6,6 +6,7 @@ use regex::Regex;
 
 mod checks;
 mod config;
+mod exploits;
 mod output;
 mod scanner;
 
@@ -64,6 +65,10 @@ struct Args {
     #[arg(short = 'v', long)]
     verbose: bool,
 
+    /// Show debug-level output: HTTP response codes for probes, skipped endpoints, raw request details
+    #[arg(short = 'd', long)]
+    debug: bool,
+
     /// Disable ANSI colour output
     #[arg(long)]
     no_color: bool,
@@ -71,12 +76,43 @@ struct Args {
     /// Save output to a file (in addition to stdout)
     #[arg(short = 'o', long, value_name = "FILE")]
     output: Option<String>,
+
+    /// Run an exploit after the scan. Available: clte, wcache, xss
+    #[arg(long, value_name = "TYPE")]
+    exploit: Option<String>,
+
+    /// Endpoint to access via the exploit (e.g. /admin for CL.TE smuggling).
+    /// Omit to run in detection-only mode.
+    #[arg(long, value_name = "PATH")]
+    exploit_target: Option<String>,
+
+    /// Save the full exploit response body to a file.
+    #[arg(long, value_name = "FILE")]
+    exploit_save: Option<String>,
+
+    /// Injection vector for the exploit.
+    /// Header format: "X-Forwarded-Host: evil.com"
+    /// Param format:  "`utm_content`=\<script\>alert(1)\</script\>"
+    #[arg(long, value_name = "INJECT")]
+    exploit_inject: Option<String>,
+
+    /// Exploit server base URL (e.g. <https://exploit-abc.exploit-server.net>).
+    /// For web cache poisoning, auto-injects "X-Forwarded-Host: <hostname>"
+    /// when no --exploit-inject is given; also verifies the server is reachable.
+    #[arg(long, value_name = "URL")]
+    exploit_server: Option<String>,
+
+    /// Out-of-band (OOB) interaction URL for blind SSRF/XXE probing
+    /// (e.g. <https://xyz.oastify.com> or a Burp Collaborator URL).
+    /// When set, probes are sent to this URL instead of localhost.
+    #[arg(long, value_name = "URL")]
+    oob: Option<String>,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
-    let printer = Arc::new(Printer::new(!args.no_color && !args.json));
+    let printer = Arc::new(Printer::new(!args.no_color && !args.json, args.debug));
 
     if !args.json {
         printer.banner();
@@ -141,6 +177,7 @@ async fn main() -> Result<()> {
         verbose: args.verbose,
         _json_output: args.json,
         output_file: args.output,
+        oob_url: args.oob,
     });
 
     if !args.json {
@@ -151,7 +188,26 @@ async fn main() -> Result<()> {
         }
     }
 
-    let findings = Box::pin(scanner::run(Arc::clone(&config), Arc::clone(&printer))).await?;
+    let mut findings =
+        Box::pin(scanner::run(
+            Arc::clone(&config),
+            Arc::clone(&printer),
+            args.exploit.as_deref(),
+        ))
+        .await?;
+
+    findings.extend(
+        run_exploit(
+            args.exploit,
+            args.exploit_target,
+            args.exploit_inject,
+            args.exploit_server,
+            args.exploit_save,
+            &config,
+            &printer,
+        )
+        .await,
+    );
 
     if args.json {
         let json = serde_json::to_string_pretty(&findings)?;
@@ -169,4 +225,69 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Run an optional exploit module and return its findings.
+async fn run_exploit(
+    exploit: Option<String>,
+    target: Option<String>,
+    inject: Option<String>,
+    server: Option<String>,
+    save_path: Option<String>,
+    config: &Arc<ScanConfig>,
+    out: &Arc<Printer>,
+) -> Vec<output::Finding> {
+    let Some(exploit_str) = exploit else {
+        if target.is_some() {
+            out.warn("--exploit-target has no effect without --exploit");
+        }
+        return Vec::new();
+    };
+
+    // xss recon (including OOB probes) runs entirely in the scan phase — no separate exploit step.
+    if exploit_str.eq_ignore_ascii_case("xss") {
+        return Vec::new();
+    }
+
+    // For wcache: derive X-Forwarded-Host from --exploit-server if no explicit inject given.
+    let effective_inject = inject.or_else(|| {
+        server.as_deref().and_then(|url| {
+            server_hostname(url).map(|h| format!("X-Forwarded-Host: {h}"))
+        })
+    });
+
+    let is_wcache = exploit_str == "wcache" || exploit_str == "cache";
+    if is_wcache && effective_inject.is_none() {
+        out.error(
+            "--exploit wcache requires --exploit-inject or --exploit-server \
+             (e.g. --exploit-server https://exploit-abc.exploit-server.net)",
+        );
+        return Vec::new();
+    }
+
+    out.section("Exploit");
+    if let Some(exploit_type) =
+        exploits::ExploitType::parse(&exploit_str, target, effective_inject, server, save_path)
+    {
+        Box::pin(exploits::run(Arc::clone(config), Arc::clone(out), exploit_type)).await
+    } else {
+        out.error(&format!(
+            "Unknown exploit '{exploit_str}'. Available: {}",
+            exploits::ExploitType::available(),
+        ));
+        Vec::new()
+    }
+}
+
+/// Extract the bare hostname from a URL (`https://host/path` → `host`).
+fn server_hostname(url: &str) -> Option<String> {
+    let host = url
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .split('/')
+        .next()?;
+    if host.is_empty() {
+        return None;
+    }
+    Some(host.to_string())
 }

@@ -15,4 +15,6 @@ pub struct ScanConfig {
     /// Whether to emit JSON instead of human-readable text (used in main.rs only).
     pub _json_output: bool,
     pub output_file: Option<String>,
+    /// Out-of-band interaction URL for blind SSRF/XXE probing.
+    pub oob_url: Option<String>,
 }

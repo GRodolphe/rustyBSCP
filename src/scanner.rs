@@ -22,7 +22,11 @@ impl ScanContext {
     }
 }
 
-pub async fn run(config: Arc<ScanConfig>, out: Arc<Printer>) -> Result<Vec<Finding>> {
+pub async fn run(
+    config: Arc<ScanConfig>,
+    out: Arc<Printer>,
+    exploit: Option<&str>,
+) -> Result<Vec<Finding>> {
     // Build the shared HTTP client with a cookie jar
     let jar = Arc::new(Jar::default());
     let mut builder = reqwest::Client::builder()
@@ -85,25 +89,38 @@ pub async fn run(config: Arc<ScanConfig>, out: Arc<Printer>) -> Result<Vec<Findi
 
     let mut all: Vec<Finding> = Vec::new();
 
-    out.section("Phase 1 — Unauthenticated Reconnaissance");
-    all.extend(phase1_unauthenticated(&ctx).await);
+    if let Some(exploit_name) = exploit {
+        // Targeted recon: only run the check relevant to the chosen exploit.
+        out.section("Targeted Reconnaissance");
+        let findings = match exploit_name.to_lowercase().as_str() {
+            "clte" | "cl.te" => checks::request_smuggling::run(&ctx).await,
+            "wcache" | "cache" => checks::web_cache::run(&ctx).await,
+            "xss" => checks::xss::run(&ctx).await,
+            _ => Vec::new(),
+        };
+        all.extend(findings);
+    } else {
+        out.section("Phase 1 — Unauthenticated Reconnaissance");
+        all.extend(Box::pin(phase1_unauthenticated(&ctx)).await);
 
-    // Git dump runs after phase 1 (which detects the exposure) but before login.
-    // Box::pin keeps the future off the stack — git_dump makes many await calls.
-    out.section("Phase 1b — Git Repository Dump");
-    all.extend(Box::pin(checks::git_dump::run(&ctx)).await);
+        // Git dump runs after phase 1 (which detects the exposure) but before login.
+        // Box::pin keeps the future off the stack — git_dump makes many await calls.
+        out.section("Phase 1b — Git Repository Dump");
+        all.extend(Box::pin(checks::git_dump::run(&ctx)).await);
 
-    out.section("Phase 2 — Authentication");
-    all.extend(phase2_login(&ctx).await);
+        out.section("Phase 2 — Authentication");
+        all.extend(phase2_login(&ctx).await);
 
-    out.section("Phase 3 — Authenticated Reconnaissance");
-    all.extend(Box::pin(phase3_authenticated(&ctx)).await);
+        out.section("Phase 3 — Authenticated Reconnaissance");
+        all.extend(Box::pin(phase3_authenticated(&ctx)).await);
+    }
 
     // ── Print findings block ──────────────────────────────────────────────
     if all.is_empty() {
         out.info("No findings recorded");
     } else {
         out.section("Findings");
+        all.sort_by_key(|f| f.severity);
         for f in &all {
             out.finding(f);
         }

@@ -3,7 +3,7 @@ use std::io::Write as _;
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Severity {
     High,
     Medium,
@@ -49,11 +49,12 @@ impl Finding {
 
 pub struct Printer {
     pub use_color: bool,
+    pub debug: bool,
 }
 
 impl Printer {
-    pub fn new(use_color: bool) -> Self {
-        Self { use_color }
+    pub fn new(use_color: bool, debug: bool) -> Self {
+        Self { use_color, debug }
     }
 
     fn writeln(line: &str) {
@@ -171,6 +172,18 @@ impl Printer {
         }
     }
 
+    /// Print only when `--debug` is active.
+    pub fn debug(&self, msg: &str) {
+        if !self.debug {
+            return;
+        }
+        if self.use_color {
+            Self::writeln(&format!("{} {}", "[DBG]".bright_black(), msg.bright_black()));
+        } else {
+            Self::writeln(&format!("[DBG] {msg}"));
+        }
+    }
+
     pub fn success(&self, msg: &str) {
         if self.use_color {
             Self::writeln(&format!("{} {}", "[✓]".green().bold(), msg.green()));
@@ -223,8 +236,11 @@ impl Printer {
         }
 
         if !findings.is_empty() {
+            // Sort by severity (High → Medium → Low → Info) for the summary list.
+            let mut sorted = findings.to_vec();
+            sorted.sort_by_key(|f| f.severity);
             Self::writeln("\n  All findings:");
-            for f in findings {
+            for f in &sorted {
                 let arrow = if self.use_color {
                     "→".green().to_string()
                 } else {
