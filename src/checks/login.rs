@@ -389,38 +389,49 @@ async fn check_username_enumeration(ctx: &Arc<ScanContext>, login_path: &str) ->
                     .map(std::string::ToString::to_string)
             })
             .collect();
+            
+        findings.extend(attempt_password_spray(ctx, login_path, &confirmed, &passwords).await);
+    }
 
-        for username in &confirmed {
-            for password in &passwords {
-                let csrf3 = extract_csrf(ctx, login_path).await.unwrap_or_default();
-                let Ok(r) = ctx
-                    .client
-                    .post(ctx.url(login_path))
-                    .form(&[
-                        ("username", username.as_str()),
-                        ("password", *password),
-                        ("csrf", &csrf3),
-                    ])
-                    .send()
-                    .await
-                else {
-                    continue;
-                };
+    findings
+}
 
-                let body = r.text().await.unwrap_or_default();
-                if body.contains("Log out") || body.contains("Your account") {
-                    let f = Finding::new(
-                        Severity::High,
-                        "Credential Spray",
-                        format!("Valid credentials found: {username}:{password}"),
-                    );
-                    ctx.out.finding(&f);
-                    findings.push(f);
-                    break;
-                }
+async fn attempt_password_spray(
+    ctx: &Arc<ScanContext>,
+    login_path: &str,
+    usernames: &[String],
+    passwords: &[&str],
+) -> Vec<Finding> {
+    let mut findings = Vec::new();
+    for username in usernames {
+        for password in passwords {
+            let csrf3 = extract_csrf(ctx, login_path).await.unwrap_or_default();
+            let Ok(r) = ctx
+                .client
+                .post(ctx.url(login_path))
+                .form(&[
+                    ("username", username.as_str()),
+                    ("password", *password),
+                    ("csrf", &csrf3),
+                ])
+                .send()
+                .await
+            else {
+                continue;
+            };
+
+            let body = r.text().await.unwrap_or_default();
+            if body.contains("Log out") || body.contains("Your account") {
+                let f = Finding::new(
+                    Severity::High,
+                    "Credential Spray",
+                    format!("Valid credentials found: {username}:{password}"),
+                );
+                ctx.out.finding(&f);
+                findings.push(f);
+                break;
             }
         }
     }
-
     findings
 }
