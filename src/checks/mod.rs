@@ -1,6 +1,7 @@
 pub mod access_control;
 pub mod business_logic;
 pub mod cors;
+pub mod crawl;
 pub mod deserialization;
 pub mod enumeration;
 pub mod git_dump;
