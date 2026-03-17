@@ -65,7 +65,10 @@ async fn check_trace_method(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     for path in paths {
         let Ok(r) = ctx
             .client
-            .request(reqwest::Method::from_bytes(b"TRACE").unwrap_or(reqwest::Method::GET), ctx.url(path))
+            .request(
+                reqwest::Method::from_bytes(b"TRACE").unwrap_or(reqwest::Method::GET),
+                ctx.url(path),
+            )
             .send()
             .await
         else {

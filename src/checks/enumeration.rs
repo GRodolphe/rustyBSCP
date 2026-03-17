@@ -30,7 +30,13 @@ pub async fn run(ctx: &Arc<ScanContext>) -> Vec<Finding> {
 
 async fn check_admin_panels(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     let mut findings = Vec::new();
-    let paths = ["/admin", "/admin-panel", "/administrator", "/manage", "/dashboard"];
+    let paths = [
+        "/admin",
+        "/admin-panel",
+        "/administrator",
+        "/manage",
+        "/dashboard",
+    ];
 
     for path in paths {
         match ctx.client.get(ctx.url(path)).send().await {
@@ -57,8 +63,12 @@ async fn check_robots(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     match ctx.client.get(ctx.url("/robots.txt")).send().await {
         Ok(r) if r.status().is_success() => {
             let body = r.text().await.unwrap_or_default();
-            let f = Finding::new(Severity::Info, "Enumeration", "robots.txt found — may reveal hidden paths")
-                .with_details(body.trim());
+            let f = Finding::new(
+                Severity::Info,
+                "Enumeration",
+                "robots.txt found — may reveal hidden paths",
+            )
+            .with_details(body.trim());
             ctx.out.finding(&f);
             findings.push(f);
         }
@@ -100,15 +110,29 @@ async fn check_app_features(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     }
 
     // Search functionality
-    if selector_matches(&doc, "input[type='search'], input[name='search'], input[name='query']") {
-        let f = Finding::new(Severity::Info, "Enumeration", "Search functionality detected (potential reflected XSS / SQLi)");
+    if selector_matches(
+        &doc,
+        "input[type='search'], input[name='search'], input[name='query']",
+    ) {
+        let f = Finding::new(
+            Severity::Info,
+            "Enumeration",
+            "Search functionality detected (potential reflected XSS / SQLi)",
+        );
         ctx.out.finding(&f);
         findings.push(f);
     }
 
     // Comment functionality
-    if selector_matches(&doc, "form[action*='comment'], textarea[name*='comment'], textarea[name*='body']") {
-        let f = Finding::new(Severity::Medium, "Enumeration", "Comment functionality detected (potential stored XSS)");
+    if selector_matches(
+        &doc,
+        "form[action*='comment'], textarea[name*='comment'], textarea[name*='body']",
+    ) {
+        let f = Finding::new(
+            Severity::Medium,
+            "Enumeration",
+            "Comment functionality detected (potential stored XSS)",
+        );
         ctx.out.finding(&f);
         findings.push(f);
     }
@@ -123,28 +147,48 @@ async fn check_app_features(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     // Newsletter / subscribe
     let body_lower = body.to_ascii_lowercase();
     if body_lower.contains("newsletter") || body_lower.contains("subscribe") {
-        let f = Finding::new(Severity::Info, "Enumeration", "Newsletter / subscription feature detected");
+        let f = Finding::new(
+            Severity::Info,
+            "Enumeration",
+            "Newsletter / subscription feature detected",
+        );
         ctx.out.finding(&f);
         findings.push(f);
     }
 
     // Exploit server link
     if body_lower.contains("exploit-") && body_lower.contains("web-security-academy.net") {
-        let f = Finding::new(Severity::Info, "Enumeration", "Exploit server reference detected in page source");
+        let f = Finding::new(
+            Severity::Info,
+            "Enumeration",
+            "Exploit server reference detected in page source",
+        );
         ctx.out.finding(&f);
         findings.push(f);
     }
 
     // WebSocket chat
-    if body_lower.contains("livechat") || body_lower.contains("live-chat") || body_lower.contains("ws://") || body_lower.contains("wss://") {
-        let f = Finding::new(Severity::Info, "Enumeration", "WebSocket / live-chat feature detected");
+    if body_lower.contains("livechat")
+        || body_lower.contains("live-chat")
+        || body_lower.contains("ws://")
+        || body_lower.contains("wss://")
+    {
+        let f = Finding::new(
+            Severity::Info,
+            "Enumeration",
+            "WebSocket / live-chat feature detected",
+        );
         ctx.out.finding(&f);
         findings.push(f);
     }
 
     // Social login / OAuth hint
     if body_lower.contains("login with social") || body_lower.contains("sign in with") {
-        let f = Finding::new(Severity::Info, "Enumeration", "Social / OAuth login option detected");
+        let f = Finding::new(
+            Severity::Info,
+            "Enumeration",
+            "Social / OAuth login option detected",
+        );
         ctx.out.finding(&f);
         findings.push(f);
     }

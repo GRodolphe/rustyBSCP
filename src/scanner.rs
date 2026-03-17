@@ -32,9 +32,7 @@ pub async fn run(
     let mut builder = reqwest::Client::builder()
         .cookie_provider(Arc::clone(&jar))
         .timeout(config.timeout)
-        .user_agent(
-            "Mozilla/5.0 (X11; Linux x86_64; rv:124.0) Gecko/20100101 Firefox/124.0",
-        )
+        .user_agent("Mozilla/5.0 (X11; Linux x86_64; rv:124.0) Gecko/20100101 Firefox/124.0")
         // Follow redirects but cap them
         .redirect(reqwest::redirect::Policy::limited(10));
 

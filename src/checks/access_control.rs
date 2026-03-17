@@ -27,7 +27,12 @@ pub async fn run(ctx: &Arc<ScanContext>) -> Vec<Finding> {
 /// viewTranscript.js indicates an admin transcript function (broken AC pattern).
 async fn check_transcript_ac(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     let mut findings = Vec::new();
-    match ctx.client.get(ctx.url("/resources/js/viewTranscript.js")).send().await {
+    match ctx
+        .client
+        .get(ctx.url("/resources/js/viewTranscript.js"))
+        .send()
+        .await
+    {
         Ok(r) if r.status().is_success() => {
             let f = Finding::new(
                 Severity::High,
@@ -68,7 +73,13 @@ async fn check_role_param(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     ];
 
     for payload in payloads {
-        let Ok(r) = ctx.client.post(ctx.url("/my-account/change-email")).form(payload).send().await else {
+        let Ok(r) = ctx
+            .client
+            .post(ctx.url("/my-account/change-email"))
+            .form(payload)
+            .send()
+            .await
+        else {
             continue;
         };
         let body = r.text().await.unwrap_or_default();
@@ -104,7 +115,8 @@ async fn check_idor_user_id(ctx: &Arc<ScanContext>) -> Vec<Finding> {
         };
         if r.status().is_success() {
             let body = r.text().await.unwrap_or_default();
-            if body.contains("administrator") || body.contains("API key") || body.contains("apiKey") {
+            if body.contains("administrator") || body.contains("API key") || body.contains("apiKey")
+            {
                 let f = Finding::new(
                     Severity::High,
                     "Access Control / IDOR",

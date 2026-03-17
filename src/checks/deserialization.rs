@@ -9,7 +9,8 @@ use crate::{
 };
 
 pub async fn run(ctx: &Arc<ScanContext>) -> Vec<Finding> {
-    ctx.out.info("Checking for insecure deserialization indicators…");
+    ctx.out
+        .info("Checking for insecure deserialization indicators…");
     check_serialized_session(ctx).await
 }
 
@@ -37,7 +38,13 @@ async fn check_serialized_session(ctx: &Arc<ScanContext>) -> Vec<Finding> {
         }
 
         // Base64-encoded value that starts with Java serialization magic (rO0A = base64 of 0xaced0000)
-        let cookie_value = val.split('=').nth(1).unwrap_or("").split(';').next().unwrap_or("");
+        let cookie_value = val
+            .split('=')
+            .nth(1)
+            .unwrap_or("")
+            .split(';')
+            .next()
+            .unwrap_or("");
         if cookie_value.starts_with("rO0A") {
             let f = Finding::new(
                 Severity::High,

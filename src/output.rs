@@ -178,7 +178,11 @@ impl Printer {
             return;
         }
         if self.use_color {
-            Self::writeln(&format!("{} {}", "[DBG]".bright_black(), msg.bright_black()));
+            Self::writeln(&format!(
+                "{} {}",
+                "[DBG]".bright_black(),
+                msg.bright_black()
+            ));
         } else {
             Self::writeln(&format!("[DBG] {msg}"));
         }

@@ -11,8 +11,11 @@ use crate::{
 pub async fn run(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     ctx.out.info("Checking for SSRF / XXE vectors…");
 
-    let (ssrf_f, stock_js_f, oob_f) =
-        tokio::join!(check_ssrf_stock(ctx), check_stock_js(ctx), check_ssrf_oob(ctx));
+    let (ssrf_f, stock_js_f, oob_f) = tokio::join!(
+        check_ssrf_stock(ctx),
+        check_stock_js(ctx),
+        check_ssrf_oob(ctx)
+    );
 
     let mut findings = Vec::new();
     findings.extend(ssrf_f);
@@ -78,11 +81,21 @@ async fn check_ssrf_stock(ctx: &Arc<ScanContext>) -> Vec<Finding> {
 /// /resources/js/stockCheck.js indicates XML-based stock check (XXE / SSRF via XML body).
 async fn check_stock_js(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     let mut findings = Vec::new();
-    match ctx.client.get(ctx.url("/resources/js/stockCheck.js")).send().await {
+    match ctx
+        .client
+        .get(ctx.url("/resources/js/stockCheck.js"))
+        .send()
+        .await
+    {
         Ok(r) if r.status().is_success() => {
             let body = r.text().await.unwrap_or_default();
-            let is_xml = body.contains("xml") || body.contains("XML") || body.contains("XMLHttpRequest");
-            let sev = if is_xml { Severity::High } else { Severity::Medium };
+            let is_xml =
+                body.contains("xml") || body.contains("XML") || body.contains("XMLHttpRequest");
+            let sev = if is_xml {
+                Severity::High
+            } else {
+                Severity::Medium
+            };
             let f = Finding::new(
                 sev,
                 "SSRF / XXE",
@@ -107,7 +120,8 @@ async fn check_ssrf_oob(ctx: &Arc<ScanContext>) -> Vec<Finding> {
         return findings;
     };
 
-    ctx.out.info(&format!("Sending OOB SSRF probes to {oob_url}…"));
+    ctx.out
+        .info(&format!("Sending OOB SSRF probes to {oob_url}…"));
 
     // 1. stockApi parameter probe
     let stock_result = ctx

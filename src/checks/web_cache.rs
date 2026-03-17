@@ -26,15 +26,14 @@ const CACHED_SCRIPTS: &[&str] = &[
 pub async fn run(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     ctx.out.info("Checking for web cache poisoning vectors…");
 
-    let (headers_f, confirm_f, scripts_f, pragma_f, unkeyed_hdr_f, unkeyed_param_f) =
-        tokio::join!(
-            check_cache_headers(ctx),
-            check_cache_confirmation(ctx),
-            check_cacheable_scripts(ctx),
-            check_pragma_cache_key(ctx),
-            check_unkeyed_headers(ctx),
-            check_unkeyed_params(ctx),
-        );
+    let (headers_f, confirm_f, scripts_f, pragma_f, unkeyed_hdr_f, unkeyed_param_f) = tokio::join!(
+        check_cache_headers(ctx),
+        check_cache_confirmation(ctx),
+        check_cacheable_scripts(ctx),
+        check_pragma_cache_key(ctx),
+        check_unkeyed_headers(ctx),
+        check_unkeyed_params(ctx),
+    );
 
     let (param_key_f, geolocate_cloak_f, fat_get_f) = tokio::join!(
         check_unkeyed_param_cache_key(ctx),
@@ -63,10 +62,18 @@ async fn check_cache_headers(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     };
 
     let headers = r.headers();
-    let x_cache = headers.get("x-cache").and_then(|h| h.to_str().ok()).unwrap_or("absent");
-    let vary = headers.get("vary").and_then(|h| h.to_str().ok()).unwrap_or("absent");
-    let cache_control =
-        headers.get("cache-control").and_then(|h| h.to_str().ok()).unwrap_or("absent");
+    let x_cache = headers
+        .get("x-cache")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("absent");
+    let vary = headers
+        .get("vary")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("absent");
+    let cache_control = headers
+        .get("cache-control")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("absent");
     let age = headers.get("age").and_then(|h| h.to_str().ok());
     let cf_cache = headers.get("cf-cache-status").and_then(|h| h.to_str().ok());
 
@@ -76,9 +83,8 @@ async fn check_cache_headers(ctx: &Arc<ScanContext>) -> Vec<Finding> {
         || headers.contains_key("vary");
 
     if caching_present {
-        let mut detail = format!(
-            "X-Cache: {x_cache}, Vary: {vary}, Cache-Control: {cache_control}"
-        );
+        let mut detail =
+            format!("X-Cache: {x_cache}, Vary: {vary}, Cache-Control: {cache_control}");
         if let Some(a) = age {
             let _ = write!(detail, ", Age: {a}");
         }
@@ -127,7 +133,9 @@ async fn check_cache_confirmation(ctx: &Arc<ScanContext>) -> Vec<Finding> {
             "Web Cache Poisoning",
             "Cache confirmed active: first request MISS, second HIT — cache poisoning viable",
         )
-        .with_details(format!("Request 1 X-Cache: {first_cache}, Request 2: {second_cache}"));
+        .with_details(format!(
+            "Request 1 X-Cache: {first_cache}, Request 2: {second_cache}"
+        ));
         ctx.out.finding(&f);
         findings.push(f);
     }
@@ -145,8 +153,11 @@ async fn check_cacheable_scripts(ctx: &Arc<ScanContext>) -> Vec<Finding> {
         if !r.status().is_success() {
             continue;
         }
-        let cached =
-            r.headers().get("x-cache").and_then(|h| h.to_str().ok()).unwrap_or("unknown");
+        let cached = r
+            .headers()
+            .get("x-cache")
+            .and_then(|h| h.to_str().ok())
+            .unwrap_or("unknown");
         let f = Finding::new(
             Severity::Medium,
             "Web Cache Poisoning",
@@ -200,12 +211,20 @@ async fn check_unkeyed_headers(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     ];
 
     // Probe both the homepage and the most common cacheable script
-    let paths = ["/", "/resources/js/tracking.js", "/resources/js/geolocate.js"];
+    let paths = [
+        "/",
+        "/resources/js/tracking.js",
+        "/resources/js/geolocate.js",
+    ];
 
     for path in paths {
         for (header, value) in headers {
-            let Ok(r) =
-                ctx.client.get(ctx.url(path)).header(header, value).send().await
+            let Ok(r) = ctx
+                .client
+                .get(ctx.url(path))
+                .header(header, value)
+                .send()
+                .await
             else {
                 continue;
             };
@@ -232,7 +251,9 @@ async fn check_unkeyed_headers(ctx: &Arc<ScanContext>) -> Vec<Finding> {
                 let f = Finding::new(
                     Severity::High,
                     "Web Cache Poisoning",
-                    format!("Unkeyed header '{header}' reflected in {path} — cache poisoning confirmed"),
+                    format!(
+                        "Unkeyed header '{header}' reflected in {path} — cache poisoning confirmed"
+                    ),
                 )
                 .with_details(format!("Injected '{value}' appears in response body"));
                 ctx.out.finding(&f);
@@ -252,10 +273,7 @@ async fn check_unkeyed_params(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     let mut findings = Vec::new();
 
     // Plain unkeyed parameter probe
-    let params = [
-        ("utm_content", PROBE),
-        ("callback", PROBE),
-    ];
+    let params = [("utm_content", PROBE), ("callback", PROBE)];
 
     for (param, value) in params {
         let url = format!("{}/?{param}={value}", ctx.config.base_url);
@@ -290,7 +308,9 @@ async fn check_unkeyed_params(ctx: &Arc<ScanContext>) -> Vec<Finding> {
             "Web Cache Poisoning",
             "Parameter cloaking via semicolons: 'callback' hidden from cache key but reflected",
         )
-        .with_details(format!("utm_content=safe;callback={PROBE} — second param reflected"));
+        .with_details(format!(
+            "utm_content=safe;callback={PROBE} — second param reflected"
+        ));
         ctx.out.finding(&f);
         findings.push(f);
     }
@@ -312,8 +332,12 @@ async fn check_unkeyed_param_cache_key(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     let Ok(r1) = ctx.client.get(&url_a).send().await else {
         return findings;
     };
-    let x_cache_1 =
-        r1.headers().get("x-cache").and_then(|h| h.to_str().ok()).unwrap_or("").to_lowercase();
+    let x_cache_1 = r1
+        .headers()
+        .get("x-cache")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("")
+        .to_lowercase();
 
     // Only meaningful if the first response was a MISS (we caused the cache write).
     if !x_cache_1.contains("miss") {
@@ -324,8 +348,12 @@ async fn check_unkeyed_param_cache_key(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     let Ok(r2) = ctx.client.get(&url_b).send().await else {
         return findings;
     };
-    let x_cache_2 =
-        r2.headers().get("x-cache").and_then(|h| h.to_str().ok()).unwrap_or("").to_lowercase();
+    let x_cache_2 = r2
+        .headers()
+        .get("x-cache")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("")
+        .to_lowercase();
 
     if x_cache_2.contains("hit") {
         let f = Finding::new(

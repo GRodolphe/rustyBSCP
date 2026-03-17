@@ -23,10 +23,16 @@ pub async fn run(ctx: &Arc<ScanContext>) -> Vec<Finding> {
 /// which suggests a trusted subdomain that could be used for CORS exploitation.
 async fn check_cors_subdomain(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     let mut findings = Vec::new();
-    let subdomain = format!("https://stock.{}.web-security-academy.net", ctx.config.lab_id);
+    let subdomain = format!(
+        "https://stock.{}.web-security-academy.net",
+        ctx.config.lab_id
+    );
 
     // Send with Origin set to the stock subdomain to test reflection
-    let origin_url = format!("https://stock.{}.web-security-academy.net", ctx.config.lab_id);
+    let origin_url = format!(
+        "https://stock.{}.web-security-academy.net",
+        ctx.config.lab_id
+    );
     let resp = ctx
         .client
         .get(ctx.url("/"))
@@ -95,11 +101,20 @@ async fn check_cors_headers(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     let test_origins = [
         "null",
         "https://evil.com",
-        &format!("https://{}.web-security-academy.net.evil.com", ctx.config.lab_id),
+        &format!(
+            "https://{}.web-security-academy.net.evil.com",
+            ctx.config.lab_id
+        ),
     ];
 
     for origin in test_origins {
-        let Ok(r) = ctx.client.get(ctx.url("/")).header("Origin", origin).send().await else {
+        let Ok(r) = ctx
+            .client
+            .get(ctx.url("/"))
+            .header("Origin", origin)
+            .send()
+            .await
+        else {
             continue;
         };
 

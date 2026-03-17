@@ -88,7 +88,9 @@ async fn check_negative_quantity(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     if status.is_success() || status.is_redirection() {
         let body = r.text().await.unwrap_or_default();
         // A negative total price or no validation error indicates the issue
-        if body.contains('-') && (body.contains("£") || body.contains('$') || body.contains("price")) {
+        if body.contains('-')
+            && (body.contains("£") || body.contains('$') || body.contains("price"))
+        {
             let f = Finding::new(
                 Severity::High,
                 "Business Logic",

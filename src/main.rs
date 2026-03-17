@@ -161,8 +161,9 @@ async fn main() -> Result<()> {
     }
 
     // Resolve proxy
-    let proxy_url =
-        args.proxy.or_else(|| args.burp.then(|| "http://127.0.0.1:8080".to_string()));
+    let proxy_url = args
+        .proxy
+        .or_else(|| args.burp.then(|| "http://127.0.0.1:8080".to_string()));
 
     let config = Arc::new(ScanConfig {
         lab_id: lab_id.clone(),
@@ -188,13 +189,12 @@ async fn main() -> Result<()> {
         }
     }
 
-    let mut findings =
-        Box::pin(scanner::run(
-            Arc::clone(&config),
-            Arc::clone(&printer),
-            args.exploit.as_deref(),
-        ))
-        .await?;
+    let mut findings = Box::pin(scanner::run(
+        Arc::clone(&config),
+        Arc::clone(&printer),
+        args.exploit.as_deref(),
+    ))
+    .await?;
 
     findings.extend(
         run_exploit(
@@ -251,9 +251,9 @@ async fn run_exploit(
 
     // For wcache: derive X-Forwarded-Host from --exploit-server if no explicit inject given.
     let effective_inject = inject.or_else(|| {
-        server.as_deref().and_then(|url| {
-            server_hostname(url).map(|h| format!("X-Forwarded-Host: {h}"))
-        })
+        server
+            .as_deref()
+            .and_then(|url| server_hostname(url).map(|h| format!("X-Forwarded-Host: {h}")))
     });
 
     let is_wcache = exploit_str == "wcache" || exploit_str == "cache";
@@ -269,7 +269,12 @@ async fn run_exploit(
     if let Some(exploit_type) =
         exploits::ExploitType::parse(&exploit_str, target, effective_inject, server, save_path)
     {
-        Box::pin(exploits::run(Arc::clone(config), Arc::clone(out), exploit_type)).await
+        Box::pin(exploits::run(
+            Arc::clone(config),
+            Arc::clone(out),
+            exploit_type,
+        ))
+        .await
     } else {
         out.error(&format!(
             "Unknown exploit '{exploit_str}'. Available: {}",

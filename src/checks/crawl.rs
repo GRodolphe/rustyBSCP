@@ -21,7 +21,8 @@ struct AjaxCall {
 
 /// Phase 1: crawl public pages for endpoints, AJAX calls, and security headers.
 pub async fn run_unauthenticated(ctx: &Arc<ScanContext>) -> Vec<Finding> {
-    ctx.out.info("Crawling public pages for endpoints and AJAX calls\u{2026}");
+    ctx.out
+        .info("Crawling public pages for endpoints and AJAX calls\u{2026}");
     let mut findings = Vec::new();
     let mut all_endpoints = BTreeSet::new();
     let mut all_ajax = Vec::new();
@@ -57,13 +58,13 @@ pub async fn run_unauthenticated(ctx: &Arc<ScanContext>) -> Vec<Finding> {
 
 /// Phase 3: crawl authenticated pages for additional endpoints and AJAX calls.
 pub async fn run_authenticated(ctx: &Arc<ScanContext>) -> Vec<Finding> {
-    ctx.out.info("Crawling authenticated pages for endpoints and AJAX calls\u{2026}");
+    ctx.out
+        .info("Crawling authenticated pages for endpoints and AJAX calls\u{2026}");
     let mut findings = Vec::new();
     let mut all_endpoints = BTreeSet::new();
     let mut all_ajax = Vec::new();
 
-    let (account, admin) =
-        tokio::join!(fetch_page(ctx, "/my-account"), fetch_page(ctx, "/admin"),);
+    let (account, admin) = tokio::join!(fetch_page(ctx, "/my-account"), fetch_page(ctx, "/admin"),);
 
     if let Some((_, body)) = account {
         all_endpoints.extend(extract_endpoints(&body, &ctx.config.base_url));
@@ -237,10 +238,7 @@ fn extract_product_paths(body: &str) -> Vec<String> {
     let Ok(re) = regex::Regex::new(r"/product\?productId=\d+") else {
         return Vec::new();
     };
-    let mut paths: Vec<String> = re
-        .find_iter(body)
-        .map(|m| m.as_str().to_string())
-        .collect();
+    let mut paths: Vec<String> = re.find_iter(body).map(|m| m.as_str().to_string()).collect();
     paths.dedup();
     paths
 }
@@ -299,8 +297,10 @@ fn print_ajax_calls(calls: &[AjaxCall], ctx: &Arc<ScanContext>) {
         .info(&format!("Detected {} AJAX/fetch call(s):", calls.len()));
     for call in calls {
         let url_str = call.url.as_deref().unwrap_or("(dynamic)");
-        ctx.out
-            .info(&format!("  {} -> {} (on {})", call.pattern, url_str, call.page));
+        ctx.out.info(&format!(
+            "  {} -> {} (on {})",
+            call.pattern, url_str, call.page
+        ));
     }
 }
 
@@ -329,7 +329,10 @@ fn ajax_to_findings(calls: &[AjaxCall]) -> Vec<Finding> {
             Finding::new(
                 Severity::Info,
                 "Crawl",
-                format!("AJAX call: {} -> {} (on {})", call.pattern, url_str, call.page),
+                format!(
+                    "AJAX call: {} -> {} (on {})",
+                    call.pattern, url_str, call.page
+                ),
             )
         })
         .collect()

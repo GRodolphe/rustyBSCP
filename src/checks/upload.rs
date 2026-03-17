@@ -36,7 +36,9 @@ async fn detect_upload_forms(ctx: &Arc<ScanContext>) -> Vec<Finding> {
         let body = r.text().await.unwrap_or_default();
         let doc = Html::parse_document(&body);
 
-        let Ok(sel) = Selector::parse("input[type='file']") else { continue };
+        let Ok(sel) = Selector::parse("input[type='file']") else {
+            continue;
+        };
         if doc.select(&sel).next().is_some() {
             // Find the form action to determine upload destination
             let action = Selector::parse("form")
@@ -60,7 +62,12 @@ async fn detect_upload_forms(ctx: &Arc<ScanContext>) -> Vec<Finding> {
 /// Probe known upload API endpoints directly.
 async fn check_upload_endpoints(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     let mut findings = Vec::new();
-    let paths = ["/upload", "/api/upload", "/files/upload", "/my-account/avatar"];
+    let paths = [
+        "/upload",
+        "/api/upload",
+        "/files/upload",
+        "/my-account/avatar",
+    ];
 
     for path in paths {
         let Ok(r) = ctx.client.get(ctx.url(path)).send().await else {

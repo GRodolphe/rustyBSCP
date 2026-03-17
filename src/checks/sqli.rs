@@ -10,7 +10,8 @@ use crate::{
 
 /// Unauthenticated `SQLi` checks.
 pub async fn run_pre_auth(ctx: &Arc<ScanContext>) -> Vec<Finding> {
-    ctx.out.info("Checking for SQL injection vectors (pre-auth)…");
+    ctx.out
+        .info("Checking for SQL injection vectors (pre-auth)…");
 
     let (filter_f, xml_f) = tokio::join!(check_filter_sqli(ctx), check_xml_sqli(ctx));
 
@@ -22,7 +23,8 @@ pub async fn run_pre_auth(ctx: &Arc<ScanContext>) -> Vec<Finding> {
 
 /// Authenticated `SQLi` checks (run after login).
 pub async fn run_post_auth(ctx: &Arc<ScanContext>) -> Vec<Finding> {
-    ctx.out.info("Checking for SQL injection vectors (post-auth)…");
+    ctx.out
+        .info("Checking for SQL injection vectors (post-auth)…");
     check_search_sqli(ctx).await
 }
 
@@ -58,11 +60,10 @@ async fn check_filter_sqli(ctx: &Arc<ScanContext>) -> Vec<Finding> {
         return findings;
     };
 
-    let is_sqli = err_resp.status().is_server_error()
-        || {
-            let err_body = err_resp.text().await.unwrap_or_default();
-            err_body.contains("SQL") || err_body.contains("syntax") || err_body.contains("ORA-")
-        };
+    let is_sqli = err_resp.status().is_server_error() || {
+        let err_body = err_resp.text().await.unwrap_or_default();
+        err_body.contains("SQL") || err_body.contains("syntax") || err_body.contains("ORA-")
+    };
 
     if is_sqli {
         let f = Finding::new(

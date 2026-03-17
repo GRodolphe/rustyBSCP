@@ -9,7 +9,8 @@ use crate::{
 };
 
 pub async fn run(ctx: &Arc<ScanContext>) -> Vec<Finding> {
-    ctx.out.info("Checking for HTTP request smuggling indicators…");
+    ctx.out
+        .info("Checking for HTTP request smuggling indicators…");
 
     let (ua_f, analytics_f, te_f) = tokio::join!(
         check_ua_reflection(ctx),

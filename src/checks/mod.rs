@@ -28,4 +28,3 @@ pub const PASSWORDS: &str = include_str!("../../wordlists/passwords.txt");
 pub fn wordlist_lines(wl: &str) -> impl Iterator<Item = &str> {
     wl.lines().map(str::trim).filter(|l| !l.is_empty())
 }
-

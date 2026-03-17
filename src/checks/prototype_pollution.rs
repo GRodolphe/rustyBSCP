@@ -31,11 +31,26 @@ async fn check_client_side_pp(ctx: &Arc<ScanContext>) -> Vec<Finding> {
         let body = r.text().await.unwrap_or_default();
 
         let gadgets = [
-            ("Object.assign(", "Object.assign — merges user-controlled keys into objects"),
-            ("JSON.parse(", "JSON.parse — may merge untrusted JSON into object chain"),
-            ("$.extend(true,", "jQuery deep extend — classic prototype pollution sink"),
-            ("_.merge(", "lodash _.merge — known prototype pollution sink"),
-            ("_.defaultsDeep(", "lodash _.defaultsDeep — known prototype pollution sink"),
+            (
+                "Object.assign(",
+                "Object.assign — merges user-controlled keys into objects",
+            ),
+            (
+                "JSON.parse(",
+                "JSON.parse — may merge untrusted JSON into object chain",
+            ),
+            (
+                "$.extend(true,",
+                "jQuery deep extend — classic prototype pollution sink",
+            ),
+            (
+                "_.merge(",
+                "lodash _.merge — known prototype pollution sink",
+            ),
+            (
+                "_.defaultsDeep(",
+                "lodash _.defaultsDeep — known prototype pollution sink",
+            ),
         ];
 
         for (pattern, label) in gadgets {

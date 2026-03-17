@@ -70,8 +70,7 @@ pub async fn run(ctx: &Arc<ScanContext>) -> Vec<Finding> {
         return Vec::new();
     }
 
-    let output_dir = std::env::temp_dir()
-        .join(format!("rbscp-git-{}", ctx.config.lab_id));
+    let output_dir = std::env::temp_dir().join(format!("rbscp-git-{}", ctx.config.lab_id));
 
     ctx.out.info(&format!(
         "Exposed .git found — dumping repo to {}",
@@ -124,14 +123,15 @@ async fn dump(ctx: &Arc<ScanContext>, out: &Path) -> Result<Stats> {
     let mut files = 0usize;
     let mut objects = 0usize;
 
-    let sha_re = Regex::new(r"(?:^|[^0-9a-f])([0-9a-f]{40})(?:[^0-9a-f]|$)")
-        .context("SHA regex")?;
+    let sha_re =
+        Regex::new(r"(?:^|[^0-9a-f])([0-9a-f]{40})(?:[^0-9a-f]|$)").context("SHA regex")?;
     let ref_re = Regex::new(r"refs/[a-zA-Z0-9/._-]+").context("ref regex")?;
     let pack_re = Regex::new(r"pack-([0-9a-f]{40})\.pack").context("pack regex")?;
 
     // ── 1. Directory listing crawl (opportunistic) ────────────────────────
     if has_directory_listing(ctx).await {
-        ctx.out.info("Directory listing available — crawling /.git/");
+        ctx.out
+            .info("Directory listing available — crawling /.git/");
         files += Box::pin(crawl(ctx, "/.git/", out)).await.unwrap_or(0);
     }
 
@@ -208,9 +208,7 @@ async fn dump(ctx: &Arc<ScanContext>, out: &Path) -> Result<Stats> {
             files += 2;
 
             // Extract SHAs from the pack index so we know what's available
-            let local_idx = out.join(format!(
-                ".git/objects/pack/pack-{pack_sha}.idx"
-            ));
+            let local_idx = out.join(format!(".git/objects/pack/pack-{pack_sha}.idx"));
             if let Ok(idx_bytes) = fs::read(&local_idx).await {
                 for sha in parse_pack_index(&idx_bytes) {
                     seen.insert(sha); // register but don't queue (already in pack)
@@ -324,8 +322,12 @@ fn harvest_text_shas(
     collect_text_files(&git_dir, &mut text_files);
 
     for path in text_files {
-        let Ok(bytes) = std::fs::read(&path) else { continue };
-        let Ok(text) = std::str::from_utf8(&bytes) else { continue };
+        let Ok(bytes) = std::fs::read(&path) else {
+            continue;
+        };
+        let Ok(text) = std::str::from_utf8(&bytes) else {
+            continue;
+        };
 
         for cap in sha_re.captures_iter(text) {
             let sha = cap.get(1).map_or("", |m| m.as_str()).to_string();
@@ -342,8 +344,12 @@ fn collect_text_refs(git_dir: &Path, ref_re: &Regex, refs: &mut Vec<String>) {
     let mut files: Vec<PathBuf> = Vec::new();
     collect_text_files(git_dir, &mut files);
     for path in files {
-        let Ok(bytes) = std::fs::read(&path) else { continue };
-        let Ok(text) = std::str::from_utf8(&bytes) else { continue };
+        let Ok(bytes) = std::fs::read(&path) else {
+            continue;
+        };
+        let Ok(text) = std::str::from_utf8(&bytes) else {
+            continue;
+        };
         for m in ref_re.find_iter(text) {
             refs.push(m.as_str().to_string());
         }
@@ -352,7 +358,9 @@ fn collect_text_refs(git_dir: &Path, ref_re: &Regex, refs: &mut Vec<String>) {
 
 /// Recursively collect non-binary files under a directory, skipping `objects/`.
 fn collect_text_files(dir: &Path, acc: &mut Vec<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
     for entry in entries.flatten() {
         let p = entry.path();
         if p.is_dir() {
@@ -372,10 +380,12 @@ fn collect_text_files(dir: &Path, acc: &mut Vec<PathBuf>) {
 /// Convert a raw byte slice to a lowercase hex string.
 fn bytes_to_hex(bytes: &[u8]) -> String {
     use std::fmt::Write as _;
-    bytes.iter().fold(String::with_capacity(bytes.len() * 2), |mut acc, b| {
-        let _ = write!(acc, "{b:02x}");
-        acc
-    })
+    bytes
+        .iter()
+        .fold(String::with_capacity(bytes.len() * 2), |mut acc, b| {
+            let _ = write!(acc, "{b:02x}");
+            acc
+        })
 }
 
 // ── Git object parsing ────────────────────────────────────────────────────────
@@ -428,7 +438,9 @@ fn parse_tree(data: &[u8]) -> Vec<String> {
     let mut pos = 0;
     while pos < data.len() {
         // Find null terminator after "<mode> <name>"
-        let Some(rel) = data[pos..].iter().position(|&b| b == 0) else { break };
+        let Some(rel) = data[pos..].iter().position(|&b| b == 0) else {
+            break;
+        };
         let sha_start = pos + rel + 1;
         let sha_end = sha_start + 20;
         if sha_end > data.len() {
@@ -478,7 +490,12 @@ fn parse_pack_index_v2(data: &[u8]) -> Vec<String> {
     }
     // Last fan-out entry = total object count
     let n_offset = fan_out_end - 4;
-    let n = u32::from_be_bytes([data[n_offset], data[n_offset + 1], data[n_offset + 2], data[n_offset + 3]]) as usize;
+    let n = u32::from_be_bytes([
+        data[n_offset],
+        data[n_offset + 1],
+        data[n_offset + 2],
+        data[n_offset + 3],
+    ]) as usize;
 
     let sha_start = fan_out_end;
     let sha_end = sha_start + n * 20;
@@ -523,11 +540,18 @@ fn parse_pack_index_v1(data: &[u8]) -> Vec<String> {
 /// Comment out dangerous git config options before running `git checkout`.
 async fn sanitize_config(out: &Path) {
     let config_path = out.join(".git/config");
-    let Ok(content) = fs::read_to_string(&config_path).await else { return };
+    let Ok(content) = fs::read_to_string(&config_path).await else {
+        return;
+    };
 
     let dangerous = [
-        "fsmonitor", "sshcommand", "askpass", "editor", "pager",
-        "gpgsign", "signingkey",
+        "fsmonitor",
+        "sshcommand",
+        "askpass",
+        "editor",
+        "pager",
+        "gpgsign",
+        "signingkey",
     ];
     let mut sanitized = String::with_capacity(content.len() + 64);
     for line in content.lines() {
@@ -551,8 +575,10 @@ async fn checkout(ctx: &Arc<ScanContext>, out: &Path) {
         .await
         .is_err()
     {
-        ctx.out.warn("git not found — skipping checkout. Run manually:");
-        ctx.out.info(&format!("  git -C {} checkout .", out.display()));
+        ctx.out
+            .warn("git not found — skipping checkout. Run manually:");
+        ctx.out
+            .info(&format!("  git -C {} checkout .", out.display()));
         return;
     }
 
@@ -565,7 +591,8 @@ async fn checkout(ctx: &Arc<ScanContext>, out: &Path) {
 
     match result {
         Ok(o) if o.status.success() => {
-            ctx.out.success("Working tree reconstructed via git checkout");
+            ctx.out
+                .success("Working tree reconstructed via git checkout");
         }
         Ok(o) => {
             if ctx.config.verbose {
@@ -581,10 +608,13 @@ async fn checkout(ctx: &Arc<ScanContext>, out: &Path) {
                 .output()
                 .await;
             if r2.is_ok_and(|o| o.status.success()) {
-                ctx.out.success("Working tree reconstructed via git checkout .");
+                ctx.out
+                    .success("Working tree reconstructed via git checkout .");
             } else {
-                ctx.out.warn("Objects downloaded but checkout incomplete — try:");
-                ctx.out.info(&format!("  git -C {} log --all --oneline", out.display()));
+                ctx.out
+                    .warn("Objects downloaded but checkout incomplete — try:");
+                ctx.out
+                    .info(&format!("  git -C {} log --all --oneline", out.display()));
             }
         }
         Err(e) => ctx.out.warn(&format!("git checkout failed: {e}")),

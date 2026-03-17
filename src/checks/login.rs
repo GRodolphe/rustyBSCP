@@ -12,7 +12,8 @@ use crate::{
 };
 
 pub async fn run(ctx: &Arc<ScanContext>) -> Vec<Finding> {
-    ctx.out.info("Attempting authentication and inspecting account features…");
+    ctx.out
+        .info("Attempting authentication and inspecting account features…");
     let mut findings = Vec::new();
 
     // Locate the login path
@@ -24,14 +25,26 @@ pub async fn run(ctx: &Arc<ScanContext>) -> Vec<Finding> {
         return findings;
     };
     ctx.out.info(&format!("Login page found at {path}"));
-    findings.push(Finding::new(Severity::Info, "Login", format!("Login page at {path}")));
+    findings.push(Finding::new(
+        Severity::Info,
+        "Login",
+        format!("Login page at {path}"),
+    ));
 
     // Attempt primary credentials
-    if let Some(login_findings) = attempt_login(ctx, &path, &ctx.config.username.clone(), &ctx.config.password.clone()).await {
+    if let Some(login_findings) = attempt_login(
+        ctx,
+        &path,
+        &ctx.config.username.clone(),
+        &ctx.config.password.clone(),
+    )
+    .await
+    {
         findings.extend(login_findings);
     } else if ctx.config.try_carlos {
         // Fallback: carlos:montoya
-        ctx.out.info("Primary login failed — trying carlos:montoya…");
+        ctx.out
+            .info("Primary login failed — trying carlos:montoya…");
         if let Some(login_findings) = attempt_login(ctx, &path, "carlos", "montoya").await {
             findings.extend(login_findings);
         }
@@ -49,7 +62,13 @@ pub async fn run(ctx: &Arc<ScanContext>) -> Vec<Finding> {
 }
 
 async fn find_login_path(ctx: &Arc<ScanContext>) -> Option<String> {
-    let candidates = ["/login", "/sign-in", "/signin", "/account/login", "/my-account"];
+    let candidates = [
+        "/login",
+        "/sign-in",
+        "/signin",
+        "/account/login",
+        "/my-account",
+    ];
     for path in candidates {
         match ctx.client.get(ctx.url(path)).send().await {
             Ok(r) if r.status().is_success() => return Some(path.to_string()),
@@ -65,9 +84,17 @@ async fn extract_csrf(ctx: &Arc<ScanContext>, path: &str) -> Option<String> {
     let doc = Html::parse_document(&body);
 
     // Common CSRF input names
-    for name in ["csrf", "_csrf", "csrfmiddlewaretoken", "token", "__RequestVerificationToken"] {
+    for name in [
+        "csrf",
+        "_csrf",
+        "csrfmiddlewaretoken",
+        "token",
+        "__RequestVerificationToken",
+    ] {
         let css = format!("input[name='{name}']");
-        let Ok(sel) = Selector::parse(&css) else { continue };
+        let Ok(sel) = Selector::parse(&css) else {
+            continue;
+        };
         if let Some(el) = doc.select(&sel).next() {
             if let Some(val) = el.value().attr("value") {
                 return Some(val.to_string());
@@ -110,12 +137,14 @@ async fn attempt_login(
 
     if !logged_in {
         if ctx.config.verbose {
-            ctx.out.not_found(&format!("Login as {username} failed (status {status})"));
+            ctx.out
+                .not_found(&format!("Login as {username} failed (status {status})"));
         }
         return None;
     }
 
-    ctx.out.success(&format!("Logged in as {username}:{password}"));
+    ctx.out
+        .success(&format!("Logged in as {username}:{password}"));
     let mut findings = Vec::new();
     findings.push(Finding::new(
         Severity::Info,
@@ -205,7 +234,12 @@ async fn inspect_account_page(ctx: &Arc<ScanContext>, login_body: &str) -> Vec<F
 
 async fn check_forgot_password(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     let mut findings = Vec::new();
-    let candidates = ["/forgot-password", "/reset-password", "/password-reset", "/account/forgot-password"];
+    let candidates = [
+        "/forgot-password",
+        "/reset-password",
+        "/password-reset",
+        "/account/forgot-password",
+    ];
     for path in candidates {
         match ctx.client.get(ctx.url(path)).send().await {
             Ok(r) if r.status().is_success() => {
@@ -279,7 +313,9 @@ async fn check_username_enumeration(ctx: &Arc<ScanContext>, login_path: &str) ->
         .send()
         .await;
 
-    let Ok(baseline_resp) = baseline_resp else { return findings };
+    let Ok(baseline_resp) = baseline_resp else {
+        return findings;
+    };
     let baseline_body = baseline_resp.text().await.unwrap_or_default();
     let baseline_len = baseline_body.len();
 
@@ -308,7 +344,11 @@ async fn check_username_enumeration(ctx: &Arc<ScanContext>, login_path: &str) ->
         let Ok(resp) = ctx
             .client
             .post(ctx.url(login_path))
-            .form(&[("username", *username), ("password", password), ("csrf", &csrf2)])
+            .form(&[
+                ("username", *username),
+                ("password", password),
+                ("csrf", &csrf2),
+            ])
             .send()
             .await
         else {
@@ -334,7 +374,8 @@ async fn check_username_enumeration(ctx: &Arc<ScanContext>, login_path: &str) ->
     }
 
     if findings.is_empty() && ctx.config.verbose {
-        ctx.out.not_found("No username enumeration detected (responses consistent)");
+        ctx.out
+            .not_found("No username enumeration detected (responses consistent)");
     }
 
     // Now attempt password spray on confirmed usernames with top passwords
@@ -355,7 +396,11 @@ async fn check_username_enumeration(ctx: &Arc<ScanContext>, login_path: &str) ->
                 let Ok(r) = ctx
                     .client
                     .post(ctx.url(login_path))
-                    .form(&[("username", username.as_str()), ("password", *password), ("csrf", &csrf3)])
+                    .form(&[
+                        ("username", username.as_str()),
+                        ("password", *password),
+                        ("csrf", &csrf3),
+                    ])
                     .send()
                     .await
                 else {
