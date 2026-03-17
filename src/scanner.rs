@@ -131,13 +131,14 @@ pub async fn run(
 
 /// Phase 1: unauthenticated, fully parallel checks.
 async fn phase1_unauthenticated(ctx: &Arc<ScanContext>) -> Vec<Finding> {
-    let (enum_f, info_f, cors_f, cache_f, ssrf_f, sqli_pre_f) = tokio::join!(
+    let (enum_f, info_f, cors_f, cache_f, ssrf_f, sqli_pre_f, crawl_f) = tokio::join!(
         checks::enumeration::run(ctx),
         checks::information_disclosure::run(ctx),
         checks::cors::run(ctx),
         checks::web_cache::run(ctx),
         checks::ssrf::run(ctx),
         checks::sqli::run_pre_auth(ctx),
+        checks::crawl::run_unauthenticated(ctx),
     );
     let mut findings = Vec::new();
     findings.extend(enum_f);
@@ -146,6 +147,7 @@ async fn phase1_unauthenticated(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     findings.extend(cache_f);
     findings.extend(ssrf_f);
     findings.extend(sqli_pre_f);
+    findings.extend(crawl_f);
     findings
 }
 
@@ -168,6 +170,7 @@ async fn phase3_authenticated(ctx: &Arc<ScanContext>) -> Vec<Finding> {
         pp_f,
         deser_f,
         bl_f,
+        crawl_f,
     ) = tokio::join!(
         checks::access_control::run(ctx),
         checks::oauth::run(ctx),
@@ -180,6 +183,7 @@ async fn phase3_authenticated(ctx: &Arc<ScanContext>) -> Vec<Finding> {
         checks::prototype_pollution::run(ctx),
         checks::deserialization::run(ctx),
         checks::business_logic::run(ctx),
+        checks::crawl::run_authenticated(ctx),
     );
     let mut findings = Vec::new();
     findings.extend(access_f);
@@ -193,5 +197,6 @@ async fn phase3_authenticated(ctx: &Arc<ScanContext>) -> Vec<Finding> {
     findings.extend(pp_f);
     findings.extend(deser_f);
     findings.extend(bl_f);
+    findings.extend(crawl_f);
     findings
 }

