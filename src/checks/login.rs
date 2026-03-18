@@ -389,7 +389,7 @@ async fn check_username_enumeration(ctx: &Arc<ScanContext>, login_path: &str) ->
                     .map(std::string::ToString::to_string)
             })
             .collect();
-            
+
         findings.extend(attempt_password_spray(ctx, login_path, &confirmed, &passwords).await);
     }
 
